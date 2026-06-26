@@ -615,7 +615,6 @@
       }
 
       .panel,
-
       .quote-paper {
         border: 0;
         box-shadow: none;
@@ -1112,10 +1111,10 @@ Lead time: ${safe(state.leadTime)}</p>
       if (showMessage) showToast("报价已保存");
     }
 
-    function loadQuote() {
+    function loadQuote(silent = false) {
       const raw = localStorage.getItem(storageKey);
       if (!raw) {
-        showToast("还没有保存的报价");
+        if (!silent) showToast("还没有保存的报价");
         return false;
       }
       try {
@@ -1126,10 +1125,10 @@ Lead time: ${safe(state.leadTime)}</p>
         items = Array.isArray(saved.items) && saved.items.length ? saved.items : structuredClone(sampleItems);
         renderItems();
         renderQuote();
-        showToast("已恢复保存的报价");
+        if (!silent) showToast("已恢复保存的报价");
         return true;
       } catch {
-        showToast("保存数据读取失败");
+        if (!silent) showToast("保存数据读取失败");
         return false;
       }
     }
@@ -1222,7 +1221,7 @@ Lead time: ${safe(state.leadTime)}</p>
     el("loadQuote").addEventListener("click", loadQuote);
     el("resetDemo").addEventListener("click", resetDemoData);
 
-    if (!loadQuote()) {
+    if (!loadQuote(true)) {
       el("quoteNo").value = makeQuoteNumber();
       renderItems();
       renderQuote();
@@ -1231,3 +1230,4 @@ Lead time: ${safe(state.leadTime)}</p>
   </script>
 </body>
 </html>
+
