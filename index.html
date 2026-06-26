@@ -287,6 +287,22 @@
       margin-top: 14px;
     }
 
+    .feature-list {
+      display: grid;
+      gap: 8px;
+      margin-top: 12px;
+    }
+
+    .feature-list div {
+      padding: 9px 10px;
+      border: 1px solid var(--line);
+      border-radius: 8px;
+      color: #2a3834;
+      background: var(--surface-soft);
+      font-size: 12px;
+      line-height: 1.45;
+    }
+
     .dashboard {
       display: grid;
       gap: 18px;
@@ -627,6 +643,12 @@
           <span class="micro">改左边，右边实时更新</span>
         </div>
 
+        <div class="feature-list" aria-label="新增功能清单">
+          <div>新增：自动保存报价，刷新页面也能恢复。</div>
+          <div>新增：税费/VAT、订金金额、项目名和客户邮箱。</div>
+          <div>新增：复制付款请求和 WhatsApp 跟进文本。</div>
+        </div>
+
         <div class="grid-2">
           <div class="field">
             <label for="seller">供应商</label>
@@ -646,6 +668,17 @@
           <div class="field">
             <label for="contact">联系人</label>
             <input id="contact" value="Mr. Daniel Tan">
+          </div>
+        </div>
+
+        <div class="grid-2">
+          <div class="field">
+            <label for="customerEmail">客户邮箱</label>
+            <input id="customerEmail" type="email" value="daniel.tan@example.com">
+          </div>
+          <div class="field">
+            <label for="projectName">项目名</label>
+            <input id="projectName" value="Packaging Line Upgrade">
           </div>
         </div>
 
@@ -710,6 +743,16 @@
           </div>
           <div class="grid-2">
             <div class="field">
+              <label for="taxRate">税费/VAT %</label>
+              <input id="taxRate" type="number" min="0" max="100" step="0.1" value="0">
+            </div>
+            <div class="field">
+              <label for="depositRate">订金比例 %</label>
+              <input id="depositRate" type="number" min="0" max="100" step="1" value="30">
+            </div>
+          </div>
+          <div class="grid-2">
+            <div class="field">
               <label for="leadTime">交期</label>
               <input id="leadTime" value="7-12 working days after deposit">
             </div>
@@ -729,6 +772,10 @@
             <button class="text-btn primary" id="printBtn" type="button">打印 / 存为 PDF</button>
             <button class="text-btn" id="copyQuote" type="button">复制报价文本</button>
             <button class="text-btn" id="copyEmail" type="button">复制跟进邮件</button>
+            <button class="text-btn" id="copyPayment" type="button">复制付款请求</button>
+            <button class="text-btn" id="copyWhatsapp" type="button">复制 WhatsApp</button>
+            <button class="text-btn" id="saveQuote" type="button">保存报价</button>
+            <button class="text-btn" id="loadQuote" type="button">恢复保存</button>
             <button class="text-btn" id="resetDemo" type="button">恢复示例</button>
           </div>
         </div>
@@ -782,10 +829,12 @@
     ];
 
     let items = structuredClone(sampleItems);
+    const storageKey = "quotecraft.savedQuote.v2";
 
     const fields = [
-      "seller", "quoteNo", "buyer", "contact", "currency", "incoterm", "validDays",
-      "freight", "discount", "costRate", "payment", "leadTime", "warranty", "notes"
+      "seller", "quoteNo", "buyer", "contact", "customerEmail", "projectName", "currency",
+      "incoterm", "validDays", "freight", "discount", "costRate", "taxRate", "depositRate",
+      "payment", "leadTime", "warranty", "notes"
     ];
 
     const el = (id) => document.getElementById(id);
@@ -808,6 +857,8 @@
       state.freight = Number(state.freight) || 0;
       state.discount = Number(state.discount) || 0;
       state.costRate = Math.min(99, Math.max(1, Number(state.costRate) || 1));
+      state.taxRate = Math.min(100, Math.max(0, Number(state.taxRate) || 0));
+      state.depositRate = Math.min(100, Math.max(0, Number(state.depositRate) || 0));
       state.items = items.map((item) => ({
         name: item.name.trim() || "Unnamed item",
         spec: item.spec.trim() || "Specification to be confirmed",
@@ -819,11 +870,15 @@
 
     function calculate(state) {
       const subtotal = state.items.reduce((sum, item) => sum + item.qty * item.price, 0);
-      const total = Math.max(0, subtotal + state.freight - state.discount);
+      const taxableBase = Math.max(0, subtotal + state.freight - state.discount);
+      const tax = taxableBase * (state.taxRate / 100);
+      const total = taxableBase + tax;
       const estimatedCost = subtotal * (state.costRate / 100) + state.freight;
       const profit = total - estimatedCost;
       const margin = total > 0 ? profit / total : 0;
-      return { subtotal, total, estimatedCost, profit, margin };
+      const deposit = total * (state.depositRate / 100);
+      const balance = total - deposit;
+      return { subtotal, taxableBase, tax, total, estimatedCost, profit, margin, deposit, balance };
     }
 
     function formatDate(offsetDays = 0) {
@@ -866,6 +921,8 @@
         `Supplier: ${state.seller}`,
         `Buyer: ${state.buyer}`,
         `Contact: ${state.contact}`,
+        `Email: ${state.customerEmail || "Not provided"}`,
+        `Project: ${state.projectName || "General quotation"}`,
         `Date: ${formatDate()}`,
         "",
         rows,
@@ -873,7 +930,10 @@
         `Subtotal: ${money(totals.subtotal, state.currency)}`,
         `Freight & handling: ${money(state.freight, state.currency)}`,
         `Discount: -${money(state.discount, state.currency)}`,
+        `Tax/VAT (${state.taxRate}%): ${money(totals.tax, state.currency)}`,
         `Grand total: ${money(totals.total, state.currency)}`,
+        `Deposit (${state.depositRate}%): ${money(totals.deposit, state.currency)}`,
+        `Balance: ${money(totals.balance, state.currency)}`,
         "",
         `Incoterm: ${state.incoterm}`,
         `Payment: ${state.payment}`,
@@ -893,6 +953,7 @@ Dear ${state.contact || "Customer"},
 Thank you for your inquiry. Please find our quotation summary below for your review.
 
 Total amount: ${money(totals.total, state.currency)}
+Deposit amount: ${money(totals.deposit, state.currency)}
 Trade term: ${state.incoterm}
 Payment: ${state.payment}
 Lead time: ${state.leadTime}
@@ -903,6 +964,35 @@ The quotation is based on the current quantity and specifications. If you need a
 
 Best regards,
 ${state.seller}`;
+    }
+
+    function buildPaymentRequest(state, totals) {
+      return `Payment request for ${state.quoteNo}
+
+Dear ${state.contact || "Customer"},
+
+To proceed with ${state.projectName || "this order"}, please arrange the deposit payment below:
+
+Quotation total: ${money(totals.total, state.currency)}
+Deposit required (${state.depositRate}%): ${money(totals.deposit, state.currency)}
+Balance before shipment: ${money(totals.balance, state.currency)}
+Payment term: ${state.payment}
+
+Once the payment is arranged, please send the bank slip so we can start production or prepare shipment.
+
+Best regards,
+${state.seller}`;
+    }
+
+    function buildWhatsapp(state, totals) {
+      return `Hi ${state.contact || "there"}, this is the quotation update for ${state.projectName || state.items[0]?.name || "your inquiry"}.
+
+Total: ${money(totals.total, state.currency)}
+Deposit: ${money(totals.deposit, state.currency)}
+Lead time: ${state.leadTime}
+Term: ${state.incoterm}
+
+Please let me know if the quantity, destination, or specification needs to be adjusted.`;
     }
 
     function renderQuote() {
@@ -923,6 +1013,7 @@ ${state.seller}`;
           <div>
             <div class="quote-brand">${safe(state.seller)}</div>
             <div class="micro" style="margin-top: 8px;">Industrial components · Automation parts · Export quotation</div>
+            <div class="micro" style="margin-top: 6px;">Project: ${safe(state.projectName || "General quotation")}</div>
           </div>
           <div class="quote-meta">
             <div><strong>Quotation No.</strong> ${safe(state.quoteNo)}</div>
@@ -937,7 +1028,8 @@ ${state.seller}`;
           <div class="info-box">
             <strong>Buyer</strong>
             <p>${safe(state.buyer)}
-${safe(state.contact)}</p>
+${safe(state.contact)}
+${safe(state.customerEmail || "")}</p>
           </div>
           <div class="info-box">
             <strong>Offer Summary</strong>
@@ -965,7 +1057,10 @@ Lead time: ${safe(state.leadTime)}</p>
             <div class="total-row"><span>Subtotal</span><strong>${money(totals.subtotal, state.currency)}</strong></div>
             <div class="total-row"><span>Freight & handling</span><strong>${money(state.freight, state.currency)}</strong></div>
             <div class="total-row"><span>Discount</span><strong>-${money(state.discount, state.currency)}</strong></div>
+            <div class="total-row"><span>Tax/VAT (${state.taxRate}%)</span><strong>${money(totals.tax, state.currency)}</strong></div>
             <div class="total-row grand"><span>Grand Total</span><strong>${money(totals.total, state.currency)}</strong></div>
+            <div class="total-row"><span>Deposit (${state.depositRate}%)</span><strong>${money(totals.deposit, state.currency)}</strong></div>
+            <div class="total-row"><span>Balance</span><strong>${money(totals.balance, state.currency)}</strong></div>
           </div>
         </div>
 
@@ -1003,17 +1098,63 @@ Lead time: ${safe(state.leadTime)}</p>
       }
     }
 
+    function snapshotQuote() {
+      return {
+        savedAt: new Date().toISOString(),
+        fields: Object.fromEntries(fields.map((id) => [id, el(id).value])),
+        items: structuredClone(items)
+      };
+    }
+
+    function saveQuote(showMessage = true) {
+      localStorage.setItem(storageKey, JSON.stringify(snapshotQuote()));
+      if (showMessage) showToast("报价已保存");
+    }
+
+    function loadQuote() {
+      const raw = localStorage.getItem(storageKey);
+      if (!raw) {
+        showToast("还没有保存的报价");
+        return false;
+      }
+      try {
+        const saved = JSON.parse(raw);
+        Object.entries(saved.fields || {}).forEach(([id, value]) => {
+          if (el(id)) el(id).value = value;
+        });
+        items = Array.isArray(saved.items) && saved.items.length ? saved.items : structuredClone(sampleItems);
+        renderItems();
+        renderQuote();
+        showToast("已恢复保存的报价");
+        return true;
+      } catch {
+        showToast("保存数据读取失败");
+        return false;
+      }
+    }
+
+    function makeQuoteNumber() {
+      const now = new Date();
+      const datePart = now.toISOString().slice(0, 10).replaceAll("-", "");
+      const timePart = String(now.getHours()).padStart(2, "0") + String(now.getMinutes()).padStart(2, "0");
+      return `QC-${datePart}-${timePart}`;
+    }
+
     function resetDemoData() {
       el("seller").value = "Ningbo Prime Industrial Co., Ltd.";
-      el("quoteNo").value = "QC-2026-001";
+      el("quoteNo").value = makeQuoteNumber();
       el("buyer").value = "ABC Automation Sdn. Bhd.";
       el("contact").value = "Mr. Daniel Tan";
+      el("customerEmail").value = "daniel.tan@example.com";
+      el("projectName").value = "Packaging Line Upgrade";
       el("currency").value = "USD";
       el("incoterm").value = "FOB Ningbo";
       el("validDays").value = "14";
       el("freight").value = "180";
       el("discount").value = "50";
       el("costRate").value = "62";
+      el("taxRate").value = "0";
+      el("depositRate").value = "30";
       el("payment").value = "30% deposit, 70% before shipment";
       el("leadTime").value = "7-12 working days after deposit";
       el("warranty").value = "12 months";
@@ -1021,7 +1162,13 @@ Lead time: ${safe(state.leadTime)}</p>
       items = structuredClone(sampleItems);
       renderItems();
       renderQuote();
+      saveQuote(false);
       showToast("示例已恢复");
+    }
+
+    function updateAndAutosave() {
+      renderQuote();
+      saveQuote(false);
     }
 
     el("items").addEventListener("input", (event) => {
@@ -1030,7 +1177,7 @@ Lead time: ${safe(state.leadTime)}</p>
       const key = target.dataset.key;
       if (!Number.isInteger(index) || !key) return;
       items[index][key] = target.type === "number" ? Number(target.value) : target.value;
-      renderQuote();
+      updateAndAutosave();
     });
 
     el("items").addEventListener("click", (event) => {
@@ -1041,16 +1188,16 @@ Lead time: ${safe(state.leadTime)}</p>
         items.push({ name: "", spec: "", qty: 1, price: 0 });
       }
       renderItems();
-      renderQuote();
+      updateAndAutosave();
     });
 
-    fields.forEach((id) => el(id).addEventListener("input", renderQuote));
-    fields.forEach((id) => el(id).addEventListener("change", renderQuote));
+    fields.forEach((id) => el(id).addEventListener("input", updateAndAutosave));
+    fields.forEach((id) => el(id).addEventListener("change", updateAndAutosave));
 
     el("addItem").addEventListener("click", () => {
       items.push({ name: "New Item", spec: "Specification", qty: 1, price: 0 });
       renderItems();
-      renderQuote();
+      updateAndAutosave();
     });
 
     el("printBtn").addEventListener("click", () => window.print());
@@ -1062,10 +1209,24 @@ Lead time: ${safe(state.leadTime)}</p>
       const { state, totals } = renderQuote();
       copyText(buildEmail(state, totals), "邮件已复制");
     });
+    el("copyPayment").addEventListener("click", () => {
+      const { state, totals } = renderQuote();
+      copyText(buildPaymentRequest(state, totals), "付款请求已复制");
+    });
+    el("copyWhatsapp").addEventListener("click", () => {
+      const { state, totals } = renderQuote();
+      copyText(buildWhatsapp(state, totals), "WhatsApp 文本已复制");
+    });
+    el("saveQuote").addEventListener("click", () => saveQuote(true));
+    el("loadQuote").addEventListener("click", loadQuote);
     el("resetDemo").addEventListener("click", resetDemoData);
 
-    renderItems();
-    renderQuote();
+    if (!loadQuote()) {
+      el("quoteNo").value = makeQuoteNumber();
+      renderItems();
+      renderQuote();
+      saveQuote(false);
+    }
   </script>
 </body>
 </html>
